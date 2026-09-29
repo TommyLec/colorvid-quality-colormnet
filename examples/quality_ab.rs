@@ -64,7 +64,8 @@ struct Args {
     /// Expérimentation : force la stabilisation temporelle du moteur qualité
     /// (le profil livré la désactive, cf. plan §3.3).
     stabilizer: Option<TemporalStrength>,
-    /// Execution provider des trois moteurs : `cpu` (défaut) ou `migraphx`.
+    /// Execution provider des trois moteurs : `cpu` (défaut), `migraphx`,
+    /// `webgpu` ou `auto`.
     provider: ProviderChoice,
     /// Politique de rétention mémoire du moteur quality.
     unbounded: bool,
@@ -129,6 +130,7 @@ fn parse_args() -> Args {
                         args.provider = match value.as_str() {
                             "cpu" => ProviderChoice::Cpu,
                             "migraphx" => ProviderChoice::Gpu(GpuProvider::Migraphx),
+                            "webgpu" => ProviderChoice::Gpu(GpuProvider::WebGpu),
                             "auto" => ProviderChoice::Gpu(GpuProvider::Auto),
                             other => panic!("provider inconnu : {other}"),
                         }
