@@ -19,8 +19,8 @@ path = "src/lib.rs"
 [dependencies]
 # Interface partagée avec le cœur : les **mêmes types** que l'application, jamais
 # une copie. Le cœur ne dépend jamais d'ici — la dépendance va dans un seul sens.
-colorvid-ai-core = { git = "https://github.com/TommyLec/colorvid.git", tag = "v0.1.0" }
-colorvid-types = { git = "https://github.com/TommyLec/colorvid.git", tag = "v0.1.0" }
+colorvid-ai-core = { git = "https://github.com/TommyLec/colorvid.git", tag = "v0.2.0" }
+colorvid-types = { git = "https://github.com/TommyLec/colorvid.git", tag = "v0.2.0" }
 image = { version = "0.25.7", default-features = false, features = ["png", "jpeg"] }
 ort = "=2.0.0-rc.13"
 # Client HTTP minimal, présent uniquement ici : le cœur n'embarque ni ce moteur ni
@@ -35,7 +35,7 @@ tracing = "0.1.44"
 [dev-dependencies]
 # Uniquement pour l'outil d'évaluation `examples/quality_ab.rs` (A/B dans le
 # pipeline réel).
-colorvid-media = { git = "https://github.com/TommyLec/colorvid.git", tag = "v0.1.0" }
+colorvid-media = { git = "https://github.com/TommyLec/colorvid.git", tag = "v0.2.0" }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 
 # Ce dépôt est autonome : il n'appartient à aucun workspace parent.

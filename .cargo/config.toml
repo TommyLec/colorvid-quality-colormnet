@@ -1,0 +1,5 @@
+[net]
+# Ce dépôt dépend du cœur par git. Tant que les deux dépôts sont **privés**, Cargo
+# ne sait pas s'authentifier et git si : ce réglage le fait passer par git, qui
+# utilisera vos identifiants habituels.
+git-fetch-with-cli = true
