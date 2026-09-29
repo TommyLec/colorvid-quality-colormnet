@@ -1,0 +1,47 @@
+{
+  "base_url": "https://huggingface.co/REMPLACER/colorvid-colormnet/resolve/main/",
+  "source": "ColorMNet (ECCV 2024) — export ONNX ColorVid (jalon C2), dérivé de yyang181/colormnet",
+  "license": "CC BY-NC-SA 4.0",
+  "files": [
+    {
+      "name": "encode_key.onnx",
+      "bytes": 825889,
+      "sha256": "d1385f5653c6230a20f0abcc854cf2100f27097670201af292a2e3377da34637"
+    },
+    {
+      "name": "encode_key.onnx.data",
+      "bytes": 280297472,
+      "sha256": "fc288e6067b0b8df76398d7ae220c36b0c65f933703c83d068b5a57a6589b876"
+    },
+    {
+      "name": "short_term_attn.onnx",
+      "bytes": 1045162,
+      "sha256": "f7b79574da30d07edfa627be1f880d5fc682bf230c2055061f26e311d18fd8c3"
+    },
+    {
+      "name": "short_term_attn.onnx.data",
+      "bytes": 7667712,
+      "sha256": "fabb457924871d1e84269e5760522dc0bd0d7a60f79f50ae37d71388294ab493"
+    },
+    {
+      "name": "segment.onnx",
+      "bytes": 154286,
+      "sha256": "cc8e076de6ea2153c220dc7e0f17690dc900f2a284a99ee066ab59dd4da57cfa"
+    },
+    {
+      "name": "segment.onnx.data",
+      "bytes": 119209984,
+      "sha256": "4446931cfb8d50519bacf2f0c3090aa02218dd2161d37e4d8ddb9288b9011fef"
+    },
+    {
+      "name": "encode_value.onnx",
+      "bytes": 150008,
+      "sha256": "d57ab7e2f7630cf4936f0547432202ed59a53eda8b0b5faee2cae421bd7a6fcc"
+    },
+    {
+      "name": "encode_value.onnx.data",
+      "bytes": 90963968,
+      "sha256": "b7c12710f17bd135e0f7a67db1dc518f004925bd96df26345ee86320cb44d6e5"
+    }
+  ]
+}

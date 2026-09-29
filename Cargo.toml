@@ -1,0 +1,42 @@
+[package]
+name = "colorvid-quality-colormnet"
+version = "0.1.0"
+edition = "2021"
+authors = ["ColorVid"]
+# **Œuvre dérivée** de ColorMNet (ECCV 2024) : le code réimplémente son
+# architecture, les fixtures de test ont été calculées par son code amont, et les
+# graphes ONNX en descendent. Le partage à l'identique s'applique : cette crate ne
+# peut pas être redistribuée sous une autre licence.
+license = "CC-BY-NC-SA-4.0"
+publish = false
+description = "Greffon « quality » de ColorVid — ColorMNet, CC BY-NC-SA 4.0, usage non commercial"
+repository = "https://github.com/TommyLec/colorvid-quality-colormnet"
+
+[lib]
+name = "colorvid_quality_colormnet"
+path = "src/lib.rs"
+
+[dependencies]
+# Interface partagée avec le cœur : les **mêmes types** que l'application, jamais
+# une copie. Le cœur ne dépend jamais d'ici — la dépendance va dans un seul sens.
+colorvid-ai-core = { git = "https://github.com/TommyLec/colorvid.git", tag = "v0.1.0" }
+colorvid-types = { git = "https://github.com/TommyLec/colorvid.git", tag = "v0.1.0" }
+image = { version = "0.25.7", default-features = false, features = ["png", "jpeg"] }
+ort = "=2.0.0-rc.13"
+# Client HTTP minimal, présent uniquement ici : le cœur n'embarque ni ce moteur ni
+# son téléchargement.
+ureq = { version = "3.4.1", default-features = false, features = ["native-tls"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sha2 = "0.10.8"
+thiserror = "2.0.20"
+tracing = "0.1.44"
+
+[dev-dependencies]
+# Uniquement pour l'outil d'évaluation `examples/quality_ab.rs` (A/B dans le
+# pipeline réel).
+colorvid-media = { git = "https://github.com/TommyLec/colorvid.git", tag = "v0.1.0" }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+
+# Ce dépôt est autonome : il n'appartient à aucun workspace parent.
+[workspace]
