@@ -11,6 +11,8 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+use md5::{Digest, Md5};
+
 use crate::catalog;
 
 /// Une entrée du manifeste : un fichier de poids, son empreinte et sa taille.
@@ -93,10 +95,18 @@ pub fn ensure_weights(
 
     let total = missing.len();
     let mut bytes = 0u64;
+    // Une signature par fichier, recalculée à l'instant du départ : le service
+    // délivre des URLs datées, qu'on ne peut ni stocker ni réutiliser.
+    let signer = Signer::from_environment();
+    if signer.is_none() {
+        tracing::warn!(
+            "aucun secret d'hébergement (COLORVID_COLORMNET_SECRET) : les URLs seront \
+             demandées non signées — un service protégé répondra 403"
+        );
+    }
     for (index, file) in missing.iter().enumerate() {
         let target = directory.join(&file.name);
-        let url = manifest.url_for(file);
-        let received = download_file(&url, &target, file, |received| {
+        let received = download_file(&target, file, &manifest, signer.as_ref(), |received| {
             progress(DownloadProgress {
                 file: &file.name,
                 index,
@@ -147,15 +157,99 @@ pub fn weights_are_present(directory: &Path) -> bool {
         .all(|file| verify_file(&directory.join(&file.name), file).is_ok())
 }
 
+/// Signataire des URLs du service d'hébergement.
+///
+/// Le service protège chaque fichier par une signature HMAC **datée** : une URL
+/// signée ne peut donc pas être stockée dans le manifeste, il faut la recalculer à
+/// chaque téléchargement — et la recalculer **encore** si elle expire en route.
+///
+/// L'algorithme est imposé par le service (`nginx secure_link`) : MD5 du texte
+/// `secret + chemin + expiration`, encodé en base64 URL-safe **sans padding**.
+/// Le chemin commence par un slash et n'inclut ni l'hôte ni les paramètres.
+pub struct Signer {
+    secret: String,
+    validity_secs: u64,
+}
+
+impl Signer {
+    /// Lit le secret dans l'environnement d'abord, puis dans celui de compilation.
+    ///
+    /// L'ordre est délibéré : un binaire distribué peut embarquer un secret (build
+    /// `quality` uniquement, jamais le cœur), et un utilisateur peut toujours le
+    /// remplacer sans reconstruire. **Absent, la signature est simplement omise** —
+    /// un service ouvert continue de fonctionner, et rien n'échoue en silence : le
+    /// serveur répondra 403 et l'erreur le dira.
+    pub fn from_environment() -> Option<Self> {
+        let secret = std::env::var("COLORVID_COLORMNET_SECRET")
+            .ok()
+            .or_else(|| option_env!("COLORVID_COLORMNET_SECRET").map(str::to_string))
+            .filter(|value| !value.trim().is_empty())?;
+        Some(Self {
+            secret,
+            // Marge confortable : le plus gros fichier (267 Mo) doit pouvoir finir.
+            validity_secs: 3600,
+        })
+    }
+
+    /// URL signée pour `name`, valable à partir de maintenant.
+    pub fn sign(&self, base_url: &str, name: &str) -> String {
+        let base = base_url.trim_end_matches('/');
+        // `base` porte l'hôte **et** le chemin : concaténer les deux dupliquerait le
+        // chemin. On recompose donc à partir de l'origine et du chemin signé.
+        let origin = origin_of(base);
+        let path = format!("{}/{}", path_of(base), name);
+        let expiration = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+            + self.validity_secs;
+        let mut hasher = Md5::new();
+        hasher.update(format!("{}{}{}", self.secret, path, expiration).as_bytes());
+        let digest = hasher.finalize();
+        let signature = base64::Engine::encode(
+            &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+            digest,
+        );
+        format!("{origin}{path}?e={expiration}&s={signature}")
+    }
+}
+
+/// Origine d'une URL : schéma et hôte, sans chemin.
+fn origin_of(url: &str) -> &str {
+    match url.find("://") {
+        Some(index) => match url[index + 3..].find('/') {
+            Some(slash) => &url[..index + 3 + slash],
+            None => url,
+        },
+        None => "",
+    }
+}
+
+/// Chemin d'une URL, sans schéma ni hôte — ce que le serveur reçoit.
+fn path_of(url: &str) -> &str {
+    match url.find("://") {
+        Some(index) => match url[index + 3..].find('/') {
+            Some(slash) => &url[index + 3 + slash..],
+            None => "/",
+        },
+        None => url,
+    }
+}
+
 fn download_file(
-    url: &str,
     target: &Path,
     file: &WeightFile,
+    manifest: &WeightManifest,
+    signer: Option<&Signer>,
     mut on_progress: impl FnMut(u64),
 ) -> Result<u64, String> {
-    let response = ureq::get(url)
+    let url = match signer {
+        Some(signer) => signer.sign(&manifest.base_url, &file.name),
+        None => manifest.url_for(file),
+    };
+    let response = ureq::get(&url)
         .call()
-        .map_err(|e| format!("téléchargement de {} : {e}", file.name))?;
+        .map_err(|e| describe_download_error(&file.name, e))?;
     let mut reader = response.into_body().into_reader();
 
     // Écriture dans un `.part` : un fichier tronqué ne peut pas être pris pour un
@@ -226,7 +320,7 @@ fn write_notices(directory: &Path, manifest: &WeightManifest) -> Result<(), Stri
 }
 
 fn sha256_file(path: &Path) -> Result<String, String> {
-    use sha2::{Digest, Sha256};
+    use sha2::Sha256;
     let mut file =
         std::fs::File::open(path).map_err(|e| format!("ouverture de {} : {e}", path.display()))?;
     let mut hasher = Sha256::new();
@@ -338,5 +432,93 @@ mod tests {
         );
         std::env::remove_var(catalog::BASE_URL_ENV);
         assert!(manifest.url_for(file).starts_with(&manifest.base_url));
+    }
+}
+
+/// Traduit l'échec HTTP en message actionnable.
+///
+/// Le service d'hébergement a trois codes qui veulent dire trois choses très
+/// différentes, et « erreur 403 » n'aide personne à les distinguer.
+fn describe_download_error(name: &str, error: ureq::Error) -> String {
+    let code = match &error {
+        ureq::Error::StatusCode(code) => Some(*code),
+        _ => None,
+    };
+    match code {
+        Some(403) => format!(
+            "téléchargement de {name} refusé (403) : signature absente, invalide ou              calculée sur un autre chemin. Vérifier `COLORVID_COLORMNET_SECRET`."
+        ),
+        Some(410) => format!(
+            "téléchargement de {name} refusé (410) : le lien signé a expiré avant la              fin du transfert."
+        ),
+        Some(404) => format!("téléchargement de {name} : fichier absent du serveur (404)."),
+        _ => format!("téléchargement de {name} : {error}"),
+    }
+}
+
+#[cfg(test)]
+mod signing_tests {
+    use super::*;
+
+    /// Vecteur de référence produit **indépendamment**, par openssl :
+    ///
+    /// ```text
+    /// printf '%s' "s3cr3t/f/colorvid/segment.onnx1791298838" \
+    ///   | openssl dgst -md5 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '='
+    /// ```
+    ///
+    /// Un test qui recalculerait la signature avec le même code ne prouverait rien :
+    /// celui-ci compare à une implémentation extérieure.
+    #[test]
+    fn the_signature_matches_an_independent_implementation() {
+        let signer = Signer {
+            secret: "s3cr3t".to_string(),
+            validity_secs: 0,
+        };
+        let path = "/f/colorvid/segment.onnx";
+        let expiration = 1791298838u64;
+        let mut hasher = Md5::new();
+        hasher.update(format!("{}{}{}", signer.secret, path, expiration).as_bytes());
+        let digest = hasher.finalize();
+        let signature = base64::Engine::encode(
+            &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+            digest,
+        );
+        assert_eq!(signature, "uznXRkR6D7kIhDEM3L4lSA");
+    }
+
+    /// La variante URL-safe ne doit laisser ni `+`, ni `/`, ni padding : le service
+    /// répond 403 pour un seul `=` final oublié.
+    #[test]
+    fn the_signature_is_url_safe_and_unpadded() {
+        let signer = Signer {
+            secret: "secret de test avec des accents éàü".to_string(),
+            validity_secs: 60,
+        };
+        let url = signer.sign("https://files.burnas.app/f/colorvid", "segment.onnx.data");
+        let signature = url.split("&s=").nth(1).expect("signature présente");
+        assert!(!signature.contains('+') && !signature.contains('/') && !signature.contains('='));
+        assert!(url.starts_with("https://files.burnas.app/f/colorvid/segment.onnx.data?e="));
+    }
+
+    /// Le chemin signé est celui que le serveur reçoit : ni hôte, ni paramètres.
+    /// L'URL finale ne doit contenir le chemin **qu'une fois** : la base porte déjà
+    /// l'hôte et le préfixe de chemin.
+    #[test]
+    fn the_signed_url_does_not_duplicate_the_path() {
+        let signer = Signer {
+            secret: "s3cr3t".to_string(),
+            validity_secs: 3600,
+        };
+        let url = signer.sign("https://files.burnas.app/f/colorvid", "segment.onnx");
+        assert_eq!(url.matches("/f/colorvid/").count(), 1, "{url}");
+        assert!(url.starts_with("https://files.burnas.app/f/colorvid/segment.onnx?e="), "{url}");
+    }
+
+    #[test]
+    fn the_signed_path_excludes_the_host() {
+        assert_eq!(path_of("https://files.burnas.app/f/colorvid"), "/f/colorvid");
+        assert_eq!(path_of("https://files.burnas.app"), "/");
+        assert_eq!(path_of("https://files.burnas.app/"), "/");
     }
 }

@@ -40,9 +40,34 @@ usage et vérifiés par empreinte SHA-256 (`assets/weights.json` porte les empre
 les tailles et la provenance). Le texte de licence et un `NOTICE.txt` sont écrits
 à côté des fichiers téléchargés.
 
-L'URL d'hébergement reste à renseigner (`base_url` dans `assets/weights.json`) ; en
-attendant, un dossier de poids existant peut être indiqué par la variable
-`COLORVID_COLORMNET_GRAPHS`.
+L'hébergement est protégé par des **URLs signées** (`base_url` dans
+`assets/weights.json`). La signature est recalculée à chaque téléchargement — une
+URL signée ne peut donc pas être stockée — et l'algorithme est celui du service :
+MD5 de `secret + chemin + expiration`, en base64 URL-safe sans padding.
+
+Le secret se fournit par variable d'environnement, ou à la compilation :
+
+```bash
+# à l'exécution, prioritaire
+COLORVID_COLORMNET_SECRET=… ./colorvid
+
+# ou figé dans un binaire de distribution (jamais dans ce dépôt)
+COLORVID_COLORMNET_SECRET=… cargo build --release
+```
+
+Sans secret, les URLs sont demandées **non signées** : un service ouvert fonctionne
+tel quel, un service protégé répond 403 avec un message qui le dit. Le secret ne doit
+jamais être versionné.
+
+> **Ce que cette signature protège, et ce qu'elle ne protège pas.** Un binaire
+> distribué ne peut pas garder un secret : qui l'a peut l'extraire. Elle écarte donc
+> le téléchargement automatisé et le lien partagé, **pas** un utilisateur déterminé.
+> Si une protection réelle devient nécessaire, la voie est un point d'entrée public
+> qui délivre des URLs signées à la demande, avec limitation de débit — l'application
+> n'aurait alors aucun secret à porter.
+
+Un dossier de poids local peut toujours être indiqué par
+`COLORVID_COLORMNET_GRAPHS`, ce qui court-circuite tout téléchargement.
 
 ## Utilisation
 
