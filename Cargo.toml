@@ -25,7 +25,13 @@ image = { version = "0.25.7", default-features = false, features = ["png", "jpeg
 ort = "=2.0.0-rc.13"
 # Client HTTP minimal, présent uniquement ici : le cœur n'embarque ni ce moteur ni
 # son téléchargement.
-ureq = { version = "3.4.1", default-features = false, features = ["native-tls"] }
+# TLS par défaut d'ureq (rustls) : il embarque ses propres racines de
+# certification, donc aucune dépendance à OpenSSL système — plus sûr à
+# distribuer. `default-features = false` + `native-tls` compilait mais
+# **paniquait à l'exécution** : ureq 3 conserve Rustls comme fournisseur par
+# défaut et refuse alors toute URI https (« provider is Rustls but feature is not
+# enabled »). Bug attrapé au premier téléchargement réel.
+ureq = "3.4.1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sha2 = "0.10.8"
