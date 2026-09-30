@@ -48,6 +48,11 @@ struct Args {
     out: PathBuf,
     anchors: Option<PathBuf>,
     graphs: PathBuf,
+    /// Dossier des modèles embarqués (DDColor). **Indispensable depuis ce dépôt** :
+    /// les poids sont ignorés par git, donc absents du clone du cœur que Cargo
+    /// télécharge pour ses dépendances. Par défaut : `models` relatif au répertoire
+    /// courant.
+    models: PathBuf,
     only: Option<String>,
     extract_only: bool,
     /// Centile de chroma du plan où poser l'ancre (levier 1, §13.10).
@@ -95,6 +100,7 @@ fn parse_args() -> Args {
         dd_frames: None,
         stabilizer: None,
         provider: ProviderChoice::Cpu,
+        models: PathBuf::from("models"),
         unbounded: false,
         window: 10,
     };
@@ -121,6 +127,7 @@ fn parse_args() -> Args {
                     "--out" => args.out = PathBuf::from(value),
                     "--anchors" => args.anchors = Some(PathBuf::from(value)),
                     "--graphs" => args.graphs = PathBuf::from(value),
+                    "--models" => args.models = PathBuf::from(value),
                     "--only" => args.only = Some(value.clone()),
                     "--percentile" => args.percentile = value.parse().expect("centile"),
                     "--window" => args.window = value.parse().expect("fenêtre"),
@@ -188,9 +195,10 @@ impl ImageColorizer for ProfileOverride {
     }
 }
 
-fn load_ddcolor(provider: ProviderChoice) -> Colorizer {
+fn load_ddcolor(provider: ProviderChoice, models: &std::path::Path) -> Colorizer {
     let selection = colorvid_types::config::ModelSelection::default();
-    let (model, checksum) = registry::dev_model_paths(&selection).expect("chemins du modèle");
+    let (model, checksum) = registry::model_paths_in(models, &selection)
+        .unwrap_or_else(|e| panic!("modèles DDColor introuvables dans {} : {e}", models.display()));
     let descriptor = registry::descriptor(&selection.id)
         .expect("le moteur DDColor est dans le registre commun");
     let width = descriptor.capabilities.width as usize;
@@ -422,7 +430,7 @@ fn main() {
 
     let built = if args.only.as_deref() != Some("cm") && args.dd_frames.is_none() {
         println!("\n=== DDColor-L 512 (référence) ===");
-        let mut colorizer = load_ddcolor(args.provider);
+        let mut colorizer = load_ddcolor(args.provider, &args.models);
         let mut flow = load_flow(args.provider);
         let cancel = AtomicBool::new(false);
         let output = args.out.join("dd.mp4");
