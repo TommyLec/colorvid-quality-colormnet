@@ -32,7 +32,7 @@ use colorvid_ai_core::model::{
     ImageColorizer,
 };
 use colorvid_ai_core::error::AiCoreError;
-use colorvid_ai_core::optical_flow::{dev_flow_paths, OpticalFlow, OpticalFlowConfig};
+use colorvid_ai_core::optical_flow::{OpticalFlow, OpticalFlowConfig};
 use colorvid_ai_core::provider::ProviderChoice;
 use colorvid_ai_core::registry;
 use colorvid_media::batch::{render_video, RenderInput, RenderOptions};
@@ -213,8 +213,20 @@ fn load_ddcolor(provider: ProviderChoice, models: &std::path::Path) -> Colorizer
     .expect("chargement DDColor-L 512")
 }
 
-fn load_flow(provider: ProviderChoice) -> OpticalFlow {
-    let (model, checksum) = dev_flow_paths();
+/// Chemins du flux optique, résolus dans le dossier de modèles **explicite**.
+///
+/// `dev_flow_paths()` du cœur part de `CARGO_MANIFEST_DIR` d'`ai-core` : depuis ce
+/// dépôt, cela désigne le clone que Cargo télécharge pour ses dépendances — un
+/// clone sans poids, que git ignore. Même cause que pour DDColor, même remède.
+fn flow_paths(models: &std::path::Path) -> (String, String) {
+    (
+        models.join("neuflow_mixed.onnx").display().to_string(),
+        models.join("neuflow_mixed.onnx.sha256").display().to_string(),
+    )
+}
+
+fn load_flow(provider: ProviderChoice, models: &std::path::Path) -> OpticalFlow {
+    let (model, checksum) = flow_paths(models);
     OpticalFlow::load(&OpticalFlowConfig {
         model_path: model,
         checksum_path: Some(checksum),
@@ -431,7 +443,7 @@ fn main() {
     let built = if args.only.as_deref() != Some("cm") && args.dd_frames.is_none() {
         println!("\n=== DDColor-L 512 (référence) ===");
         let mut colorizer = load_ddcolor(args.provider, &args.models);
-        let mut flow = load_flow(args.provider);
+        let mut flow = load_flow(args.provider, &args.models);
         let cancel = AtomicBool::new(false);
         let output = args.out.join("dd.mp4");
         let last = Arc::new(AtomicU64::new(0));
@@ -513,7 +525,7 @@ fn main() {
     )
     .expect("chargement des quatre graphes");
     // Le stabilisateur a besoin du flux optique : on ne le charge que pour le test.
-    let mut stabilizer_flow = args.stabilizer.map(|_| load_flow(args.provider));
+    let mut stabilizer_flow = args.stabilizer.map(|_| load_flow(args.provider, &args.models));
     let profile = match args.stabilizer {
         Some(_) => EngineProfile {
             temporal_stabilizer: true,
