@@ -1,5 +1,5 @@
 {
-  "base_url": "https://files.burnas.app/f/colorvid",
+  "base_url": "https://github.com/TommyLec/colorvid-quality-colormnet/releases/download/graphes-quality-v1",
   "source": "ColorMNet (ECCV 2024) — export ONNX ColorVid (jalon C2), dérivé de yyang181/colormnet",
   "license": "CC BY-NC-SA 4.0",
   "files": [
